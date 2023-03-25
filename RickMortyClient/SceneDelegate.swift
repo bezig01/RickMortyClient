@@ -6,17 +6,52 @@
 //
 
 import UIKit
+import Network
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     var window: UIWindow?
-
+    var alertWindow: UIWindow?
+    
+    let monitor = NWPathMonitor()
+    let queue = DispatchQueue(label: "Monitor")
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         // Use this method to optionally configure and attach the UIWindow `window` to the provided UIWindowScene `scene`.
         // If using a storyboard, the `window` property will automatically be initialized and attached to the scene.
         // This delegate does not imply the connecting scene or session are new (see `application:configurationForConnectingSceneSession` instead).
-        guard let _ = (scene as? UIWindowScene) else { return }
+        guard let windowScene = (scene as? UIWindowScene) else { return }
+        
+        window = UIWindow(windowScene: windowScene)
+        window?.makeKeyAndVisible()
+        
+        let viewController = CharactersViewController()
+        let nav = UINavigationController()
+        nav.viewControllers = [viewController]
+        
+        window?.rootViewController = nav
+        
+        monitor.pathUpdateHandler = { path in
+            guard path.status != .satisfied else { return }
+            print("No connection.")
+            DispatchQueue.main.async { [weak self] in
+                self?.presentAlert(windowScene)
+            }
+        }
+        
+        monitor.start(queue: queue)
+        
+        if let appDelegate = (UIApplication.shared.delegate as? AppDelegate),
+           !appDelegate.isUserLoggedIn {
+            
+            let viewController = LoginViewController()
+            viewController.isModalInPresentation = true
+            
+            let nav = UINavigationController()
+            nav.viewControllers = [viewController]
+            
+            window?.rootViewController?.present(nav, animated: true)
+        }
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {
@@ -49,7 +84,49 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Save changes in the application's managed object context when the application transitions to the background.
         (UIApplication.shared.delegate as? AppDelegate)?.saveContext()
     }
-
-
 }
 
+extension SceneDelegate {
+    
+    func presentAlert(_ windowScene: UIWindowScene) {
+        let alertController = UIAlertController(title: nil, message: "No connection.", preferredStyle: .alert)
+        
+        let dismissAction = UIAlertAction(title: "OK", style: .cancel) { [weak self] action in
+            alertController.dismiss(animated: true, completion: nil)
+            self?.alertWindow?.resignKey()
+            self?.alertWindow = nil
+            }
+
+        alertController.addAction(dismissAction)
+
+        let alertWindow = UIWindow(windowScene: windowScene)
+        alertWindow.rootViewController = UIViewController()
+        alertWindow.windowLevel = .alert + 1
+        alertWindow.makeKeyAndVisible()
+        alertWindow.rootViewController?.present(alertController, animated: true, completion: nil)
+        
+        self.alertWindow = alertWindow
+    }
+    
+    func initialScreen() {
+        
+        guard let window else { return }
+        
+        let viewController = CharactersViewController()
+        let nav = UINavigationController()
+        nav.viewControllers = [viewController]
+        
+        UIView.transition(with: window, duration: 0.3, options: .transitionCrossDissolve, animations: {
+            window.rootViewController = nav
+        }) { _ in
+            
+             let viewController = LoginViewController()
+             viewController.isModalInPresentation = true
+             
+             let nav = UINavigationController()
+             nav.viewControllers = [viewController]
+             
+             window.rootViewController?.present(nav, animated: true)
+        }
+    }
+}
